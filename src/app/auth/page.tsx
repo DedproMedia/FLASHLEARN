@@ -1,0 +1,184 @@
+"use client";
+
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+
+function AuthPageInner() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/";
+
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [working, setWorking] = useState<"google" | "email" | null>(null);
+  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+  const [debug, setDebug] = useState<any>(null);
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+  // Build redirect once on the client, carrying the page to return to after sign-in.
+  const redirectTo = useMemo(() => {
+    if (typeof window === "undefined") return "/auth/callback";
+    return `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+  }, [next]);
+
+  // Direct (SDK-free) OAuth URL as a last-resort fallback
+  const directOAuthUrl = useMemo(() => {
+    if (!supabaseUrl) return null;
+    const u = new URL(supabaseUrl.replace(/\/$/, "") + "/auth/v1/authorize");
+    u.searchParams.set("provider", "google");
+    u.searchParams.set("redirect_to", redirectTo);
+    return u.toString();
+  }, [supabaseUrl, redirectTo]);
+
+  useEffect(() => {
+    const report: Record<string, any> = {
+      NEXT_PUBLIC_SUPABASE_URL_present: Boolean(supabaseUrl),
+      NEXT_PUBLIC_SUPABASE_ANON_KEY_present: Boolean(anonKey),
+      redirectTo,
+      directOAuthUrl,
+    };
+    setDebug(report);
+    if (!supabaseUrl || !anonKey) {
+      setErr("Missing Supabase env vars in Vercel: NEXT_PUBLIC_SUPABASE_URL and/or NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+    }
+  }, [supabaseUrl, anonKey, redirectTo, directOAuthUrl]);
+
+  const signInWithGoogle = async () => {
+    setErr(null);
+    setOauthUrl(null);
+    setWorking("google");
+    try {
+      const supabase = supabaseBrowser();
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo },
+      });
+
+      // capture for on-page debugging
+      setDebug((d: any) => ({ ...d, sdkReturn: { data, error } }));
+
+      if (error) throw error;
+
+      if (data?.url) {
+        setOauthUrl(data.url);
+        // Force navigation (avoids popup blockers)
+        window.location.assign(data.url);
+        return;
+      }
+
+      setErr("SDK returned no OAuth URL. Check Supabase → Auth → Providers → Google is enabled and has Client ID/Secret.");
+    } catch (e: any) {
+      console.error("Google OAuth error:", e);
+      setErr(e?.message ?? "Google sign-in failed. Check provider config.");
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const sendMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    setWorking("email");
+    try {
+      const supabase = supabaseBrowser();
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo },
+      });
+      if (error) throw error;
+      setSent(true);
+    } catch (e: any) {
+      console.error("Magic link error:", e);
+      setErr(e?.message ?? "Magic link failed. Check Supabase email settings & redirect allowlist.");
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  return (
+    <div style={{ padding: 16, maxWidth: 520 }}>
+      <h1 style={{ marginTop: 0 }}>Sign in</h1>
+
+      <button
+        type="button"
+        onClick={signInWithGoogle}
+        disabled={working !== null}
+        style={{
+          padding: 10, border: "1px solid #ddd", borderRadius: 6,
+          width: "100%", marginBottom: 8, opacity: working ? 0.7 : 1,
+          cursor: working ? "not-allowed" : "pointer",
+        }}
+        aria-busy={working === "google"}
+      >
+        {working === "google" ? "Opening Google…" : "Continue with Google"}
+      </button>
+
+      {/* Absolute fallback: raw OAuth URL */}
+      {directOAuthUrl && (
+        <p style={{ fontSize: 12, marginTop: 4 }}>
+          If nothing happened, use the fallback:{" "}
+          <a href={directOAuthUrl}>Continue with Google (direct)</a>
+        </p>
+      )}
+
+      {/* SDK returned URL (if any) */}
+      {oauthUrl && !directOAuthUrl && (
+        <p style={{ fontSize: 12, marginTop: 4 }}>
+          Or click here: <a href={oauthUrl}>Continue (SDK URL)</a>
+        </p>
+      )}
+
+      <hr />
+
+      {sent ? (
+        <p>Check your email for a magic link (look in junk/spam). After clicking it you’ll be signed in.</p>
+      ) : (
+        <form onSubmit={sendMagicLink} style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          <label>
+            Email
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={{ display: "block", width: "100%", padding: 8, marginTop: 4 }}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={working !== null}
+            style={{ padding: 10, border: "1px solid #ddd", borderRadius: 6 }}
+            aria-busy={working === "email"}
+          >
+            {working === "email" ? "Sending…" : "Send magic link"}
+          </button>
+        </form>
+      )}
+
+      {err && <p style={{ color: "crimson", marginTop: 12 }}>{err}</p>}
+
+      {/* Debug block to make config issues obvious */}
+      <details style={{ marginTop: 12 }}>
+        <summary>Debug info</summary>
+        <pre style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>
+{JSON.stringify(debug, null, 2)}
+        </pre>
+      </details>
+
+      <p style={{ fontSize: 12, color: "#666", marginTop: 12 }}>
+        Redirect target: <code>{redirectTo}</code>
+      </p>
+    </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 16 }}>Loading…</div>}>
+      <AuthPageInner />
+    </Suspense>
+  );
+}
