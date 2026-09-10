@@ -1,15 +1,15 @@
 "use client";
 
-import { CONTINENTS, type Continent } from "@/lib/flashcards/types";
-
-export default function ContinentFilter({
+export default function GroupFilter({
+  groups,
   value,
   onChange,
 }: {
-  value: Continent | "All";
-  onChange: (continent: Continent | "All") => void;
+  groups: string[];
+  value: string;
+  onChange: (group: string) => void;
 }) {
-  const options: (Continent | "All")[] = ["All", ...CONTINENTS];
+  const options = ["All", ...groups];
 
   return (
     <div className="flex flex-wrap gap-2">

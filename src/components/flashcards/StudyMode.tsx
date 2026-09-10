@@ -4,11 +4,11 @@ import { useCallback, useMemo, useState } from "react";
 import Flashcard from "./Flashcard";
 import ConfidenceRater from "./ConfidenceRater";
 import { learningWeight } from "@/lib/flashcards/confidence";
-import type { Country, ProgressMap, Rating } from "@/lib/flashcards/types";
+import type { FlashcardItem, ProgressMap, Rating } from "@/lib/flashcards/types";
 
-function pickWeighted(deck: Country[], progress: ProgressMap, avoidCode?: string): Country {
-  const pool = deck.length > 1 && avoidCode ? deck.filter((c) => c.code !== avoidCode) : deck;
-  const weights = pool.map((c) => learningWeight(progress[c.code]?.rating ?? null));
+function pickWeighted(deck: FlashcardItem[], progress: ProgressMap, avoidId?: string): FlashcardItem {
+  const pool = deck.length > 1 && avoidId ? deck.filter((c) => c.id !== avoidId) : deck;
+  const weights = pool.map((c) => learningWeight(progress[c.id]?.rating ?? null));
   const total = weights.reduce((sum, w) => sum + w, 0);
   let roll = Math.random() * total;
   for (let i = 0; i < pool.length; i++) {
@@ -23,30 +23,30 @@ export default function StudyMode({
   progress,
   onRate,
 }: {
-  deck: Country[];
+  deck: FlashcardItem[];
   progress: ProgressMap;
-  onRate: (code: string, rating: Rating) => void;
+  onRate: (id: string, rating: Rating) => void;
 }) {
-  const [current, setCurrent] = useState<Country | null>(() =>
+  const [current, setCurrent] = useState<FlashcardItem | null>(() =>
     deck.length ? pickWeighted(deck, progress) : null
   );
   const [flipped, setFlipped] = useState(false);
   const [seenCount, setSeenCount] = useState(0);
 
   const currentRating = useMemo(
-    () => (current ? progress[current.code]?.rating ?? null : null),
+    () => (current ? progress[current.id]?.rating ?? null : null),
     [current, progress]
   );
 
   const next = useCallback(() => {
-    setCurrent((prev) => pickWeighted(deck, progress, prev?.code));
+    setCurrent((prev) => pickWeighted(deck, progress, prev?.id));
     setFlipped(false);
   }, [deck, progress]);
 
   const handleRate = useCallback(
     (rating: Rating) => {
       if (!current) return;
-      onRate(current.code, rating);
+      onRate(current.id, rating);
       setSeenCount((n) => n + 1);
       setTimeout(next, 350);
     },
@@ -56,7 +56,7 @@ export default function StudyMode({
   if (!deck.length || !current) {
     return (
       <p className="text-gray-500 text-center py-12">
-        No cards in this continent yet — pick a different filter.
+        No cards in this group yet — pick a different filter.
       </p>
     );
   }
@@ -68,7 +68,7 @@ export default function StudyMode({
         {seenCount} this session.
       </p>
       <Flashcard
-        country={current}
+        item={current}
         flipped={flipped}
         onFlip={() => setFlipped((f) => !f)}
         rating={currentRating}
@@ -76,7 +76,7 @@ export default function StudyMode({
       {flipped ? (
         <ConfidenceRater onRate={handleRate} />
       ) : (
-        <p className="text-sm text-gray-400">Tap the card to reveal the capital</p>
+        <p className="text-sm text-gray-400">Tap the card to reveal the answer</p>
       )}
       <button
         type="button"

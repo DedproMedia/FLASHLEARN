@@ -1,25 +1,24 @@
-export type Continent =
-  | "Africa"
-  | "Asia"
-  | "Europe"
-  | "North America"
-  | "South America"
-  | "Oceania";
+export type SubjectId = "capitals" | "planets";
 
-export const CONTINENTS: Continent[] = [
-  "Africa",
-  "Asia",
-  "Europe",
-  "North America",
-  "South America",
-  "Oceania",
-];
+export interface Subject {
+  id: SubjectId;
+  label: string;
+  icon: string;
+  groupLabel: string;
+  groups: string[];
+}
 
-export interface Country {
-  code: string; // ISO 3166-1 alpha-2
-  name: string;
-  capital: string;
-  continent: Continent;
+// A single flashcard, generic across subjects. "group" is the filter axis
+// for a subject (continent for capitals, planet for the solar system).
+export interface FlashcardItem {
+  id: string;
+  subject: SubjectId;
+  group: string;
+  icon: string;
+  frontTitle: string;
+  frontSubtitle: string;
+  backTitle: string;
+  backSubtitle: string;
 }
 
 // 1-5, or null when the card has never been rated.

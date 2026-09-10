@@ -1,12 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { COUNTRIES } from "@/lib/flashcards/countries";
-import { CONTINENTS, type ProgressMap } from "@/lib/flashcards/types";
+import type { FlashcardItem, ProgressMap } from "@/lib/flashcards/types";
 import { confidenceBand } from "@/lib/flashcards/confidence";
 
-interface ContinentStats {
-  continent: string;
+interface GroupStats {
+  group: string;
   total: number;
   unrated: number;
   low: number;
@@ -16,9 +15,9 @@ interface ContinentStats {
   avgConfidencePct: number | null;
 }
 
-function computeStats(progress: ProgressMap): ContinentStats[] {
-  return CONTINENTS.map((continent) => {
-    const countries = COUNTRIES.filter((c) => c.continent === continent);
+function computeStats(items: FlashcardItem[], groups: string[], progress: ProgressMap): GroupStats[] {
+  return groups.map((group) => {
+    const groupItems = items.filter((i) => i.group === group);
     let unrated = 0,
       low = 0,
       medium = 0,
@@ -26,8 +25,8 @@ function computeStats(progress: ProgressMap): ContinentStats[] {
       ratedSum = 0,
       ratedCount = 0;
 
-    for (const c of countries) {
-      const rating = progress[c.code]?.rating ?? null;
+    for (const item of groupItems) {
+      const rating = progress[item.id]?.rating ?? null;
       const band = confidenceBand(rating);
       if (band === "unrated") unrated++;
       else if (band === "low") low++;
@@ -40,8 +39,8 @@ function computeStats(progress: ProgressMap): ContinentStats[] {
     }
 
     return {
-      continent,
-      total: countries.length,
+      group,
+      total: groupItems.length,
       unrated,
       low,
       medium,
@@ -52,8 +51,16 @@ function computeStats(progress: ProgressMap): ContinentStats[] {
   });
 }
 
-export default function Dashboard({ progress }: { progress: ProgressMap }) {
-  const stats = useMemo(() => computeStats(progress), [progress]);
+export default function Dashboard({
+  items,
+  groups,
+  progress,
+}: {
+  items: FlashcardItem[];
+  groups: string[];
+  progress: ProgressMap;
+}) {
+  const stats = useMemo(() => computeStats(items, groups, progress), [items, groups, progress]);
 
   const overall = useMemo(() => {
     const total = stats.reduce((s, c) => s + c.total, 0);
@@ -85,9 +92,9 @@ export default function Dashboard({ progress }: { progress: ProgressMap }) {
 
       <div className="flex flex-col gap-4">
         {stats.map((s) => (
-          <div key={s.continent} className="rounded-xl border border-gray-200 p-4">
+          <div key={s.group} className="rounded-xl border border-gray-200 p-4">
             <div className="flex items-baseline justify-between mb-2">
-              <h3 className="font-bold text-gray-900">{s.continent}</h3>
+              <h3 className="font-bold text-gray-900">{s.group}</h3>
               <span className="text-sm text-gray-500">
                 {s.avgConfidencePct !== null ? `${s.avgConfidencePct}% confident` : "Not started"}
               </span>

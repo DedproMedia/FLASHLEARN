@@ -1,8 +1,19 @@
-# FlashLearn — Capital Cities Flashcards
+# FlashLearn
 
-A flashcard app for learning the world's capital cities: flip cards by continent, rate your
-confidence on each one, and let Learning Mode resurface the cards you're shakiest on more
-often. Sign in (optional) to sync your progress across devices.
+A flashcard app for learning trivia by subject. Two categories so far:
+
+- **Capital Cities** — flip cards by continent, learn each country's capital
+- **Solar System** — flip cards by planet, covering moons, distance from the Sun, orbit and
+  day length, size, temperature, atmosphere, and a fun fact for each of the 8 planets plus
+  Pluto
+
+Rate your confidence on each card and let Learning Mode resurface the cards you're shakiest
+on more often. Sign in (optional) to sync your progress across devices.
+
+Adding another subject means adding a new items/subject file under `src/lib/flashcards/`
+(see `capitals.ts` and `planets.ts` for the pattern) and registering it in `subjects.ts` —
+everything else (flip cards, confidence rating, Learning Mode, Browse Deck, Dashboard) is
+shared and subject-agnostic.
 
 ## Quick start
 

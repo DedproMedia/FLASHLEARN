@@ -1,17 +1,16 @@
 "use client";
 
-import { flagEmoji } from "@/lib/flashcards/flag";
 import { confidenceStyle } from "@/lib/flashcards/confidence";
-import type { Country, Rating } from "@/lib/flashcards/types";
+import type { FlashcardItem, Rating } from "@/lib/flashcards/types";
 
 export default function Flashcard({
-  country,
+  item,
   flipped,
   onFlip,
   rating,
   size = "large",
 }: {
-  country: Country;
+  item: FlashcardItem;
   flipped: boolean;
   onFlip: () => void;
   rating: Rating | null;
@@ -26,20 +25,20 @@ export default function Flashcard({
       onClick={onFlip}
       className={`!p-0 w-full ${isLarge ? "h-64" : "h-40"} rounded-2xl border-4 ${style.border} ${style.bg} shadow-md flex flex-col items-center justify-center gap-3 transition-colors`}
     >
-      <span className={isLarge ? "text-6xl" : "text-4xl"}>{flagEmoji(country.code)}</span>
+      <span className={isLarge ? "text-6xl" : "text-4xl"}>{item.icon}</span>
       {!flipped ? (
         <div className="text-center px-3">
           <p className={`font-bold ${isLarge ? "text-xl" : "text-base"} text-gray-900`}>
-            {country.name}
+            {item.frontTitle}
           </p>
-          <p className="text-xs text-gray-400 mt-1">Tap to reveal capital</p>
+          <p className="text-xs text-gray-400 mt-1">{item.frontSubtitle}</p>
         </div>
       ) : (
         <div className="text-center px-3">
           <p className={`font-bold ${isLarge ? "text-2xl" : "text-lg"} text-gray-900`}>
-            {country.capital}
+            {item.backTitle}
           </p>
-          <p className="text-xs text-gray-400 mt-1">{country.name}</p>
+          <p className="text-xs text-gray-400 mt-1">{item.backSubtitle}</p>
         </div>
       )}
     </button>
