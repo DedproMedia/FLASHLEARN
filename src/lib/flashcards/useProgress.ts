@@ -3,9 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { safeSupabaseBrowser } from "./supabaseClient";
-import { DEFAULT_PROGRESS, type CardProgress, type ProgressMap, type Rating } from "./types";
+import {
+  DEFAULT_PROGRESS,
+  type CardProgress,
+  type ProgressMap,
+  type Rating,
+  type SubjectId,
+} from "./types";
 
-const STORAGE_KEY = "flashcards:capitals:progress:v1";
+// The "capitals" subject predates the multi-subject app and keeps its original
+// storage key so existing guests don't lose progress; other subjects get their
+// own namespaced key.
+function storageKey(subject: SubjectId): string {
+  if (subject === "capitals") return "flashcards:capitals:progress:v1";
+  return `flashcards:${subject}:progress:v1`;
+}
 
 interface ProgressRow {
   country_code: string;
@@ -14,21 +26,29 @@ interface ProgressRow {
   last_reviewed: string;
 }
 
-function loadLocalProgress(): ProgressMap {
+function loadLocalProgress(subject: SubjectId): ProgressMap {
   if (typeof window === "undefined") return {};
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey(subject));
     return raw ? (JSON.parse(raw) as ProgressMap) : {};
   } catch {
     return {};
   }
 }
 
-function saveLocalProgress(progress: ProgressMap) {
+function saveLocalProgress(subject: SubjectId, progress: ProgressMap) {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+    window.localStorage.setItem(storageKey(subject), JSON.stringify(progress));
   } catch {
     // localStorage unavailable (private browsing, quota, etc.) - ignore.
+  }
+}
+
+function clearLocalProgress(subject: SubjectId) {
+  try {
+    window.localStorage.removeItem(storageKey(subject));
+  } catch {
+    // ignore
   }
 }
 
@@ -44,14 +64,14 @@ function rowsToProgress(rows: ProgressRow[]): ProgressMap {
   return map;
 }
 
-export function useProgress() {
+export function useProgress(subject: SubjectId) {
   const supabase = useMemo(() => safeSupabaseBrowser(), []);
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [progress, setProgress] = useState<ProgressMap>({});
   const [hydrated, setHydrated] = useState(false);
   const progressRef = useRef<ProgressMap>({});
-  const mergedForUser = useRef<string | null>(null);
+  const mergedForKey = useRef<string | null>(null);
 
   useEffect(() => {
     progressRef.current = progress;
@@ -79,14 +99,15 @@ export function useProgress() {
   }, [supabase]);
 
   // Load progress (from Supabase when signed in, localStorage otherwise), merging
-  // any guest progress into the account once, the first time a user signs in.
+  // any guest progress into the account once, the first time a user signs in to
+  // this particular subject.
   useEffect(() => {
     if (!authChecked) return;
     let cancelled = false;
 
     async function load() {
       if (!user || !supabase) {
-        setProgress(loadLocalProgress());
+        setProgress(loadLocalProgress(subject));
         setHydrated(true);
         return;
       }
@@ -94,26 +115,29 @@ export function useProgress() {
       const { data, error } = await supabase
         .from("flashcard_progress")
         .select("country_code, rating, times_reviewed, last_reviewed")
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .eq("subject", subject);
 
       if (cancelled) return;
 
       if (error) {
         console.error("Failed to load flashcard progress", error);
-        setProgress(loadLocalProgress());
+        setProgress(loadLocalProgress(subject));
         setHydrated(true);
         return;
       }
 
       let remote = rowsToProgress((data ?? []) as ProgressRow[]);
 
-      if (mergedForUser.current !== user.id) {
-        mergedForUser.current = user.id;
-        const local = loadLocalProgress();
+      const mergeKey = `${subject}:${user.id}`;
+      if (mergedForKey.current !== mergeKey) {
+        mergedForKey.current = mergeKey;
+        const local = loadLocalProgress(subject);
         const toMerge = Object.entries(local).filter(([code]) => !(code in remote));
         if (toMerge.length) {
           const upserts = toMerge.map(([code, p]) => ({
             user_id: user.id,
+            subject,
             country_code: code,
             rating: p.rating,
             times_reviewed: p.timesReviewed,
@@ -122,7 +146,7 @@ export function useProgress() {
           const { error: mergeError } = await supabase.from("flashcard_progress").upsert(upserts);
           if (!mergeError) {
             remote = { ...local, ...remote };
-            window.localStorage.removeItem(STORAGE_KEY);
+            clearLocalProgress(subject);
           }
         }
       }
@@ -138,13 +162,13 @@ export function useProgress() {
     return () => {
       cancelled = true;
     };
-  }, [user, authChecked, supabase]);
+  }, [user, authChecked, supabase, subject]);
 
   // Guests keep their progress in localStorage.
   useEffect(() => {
     if (!hydrated || user) return;
-    saveLocalProgress(progress);
-  }, [progress, hydrated, user]);
+    saveLocalProgress(subject, progress);
+  }, [progress, hydrated, user, subject]);
 
   const getProgress = useCallback(
     (code: string) => progress[code] ?? DEFAULT_PROGRESS,
@@ -165,6 +189,7 @@ export function useProgress() {
       if (user && supabase) {
         const { error } = await supabase.from("flashcard_progress").upsert({
           user_id: user.id,
+          subject,
           country_code: code,
           rating: updated.rating,
           times_reviewed: updated.timesReviewed,
@@ -173,19 +198,23 @@ export function useProgress() {
         if (error) console.error("Failed to save flashcard progress", error);
       }
     },
-    [user, supabase]
+    [user, supabase, subject]
   );
 
   const resetAll = useCallback(async () => {
     progressRef.current = {};
     setProgress({});
     if (user && supabase) {
-      const { error } = await supabase.from("flashcard_progress").delete().eq("user_id", user.id);
+      const { error } = await supabase
+        .from("flashcard_progress")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("subject", subject);
       if (error) console.error("Failed to reset flashcard progress", error);
     } else {
-      window.localStorage.removeItem(STORAGE_KEY);
+      clearLocalProgress(subject);
     }
-  }, [user, supabase]);
+  }, [user, supabase, subject]);
 
   return { progress, hydrated, getProgress, rate, resetAll, user };
 }

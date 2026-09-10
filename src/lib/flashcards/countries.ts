@@ -1,4 +1,26 @@
-import type { Country } from "./types";
+export type Continent =
+  | "Africa"
+  | "Asia"
+  | "Europe"
+  | "North America"
+  | "South America"
+  | "Oceania";
+
+export const CONTINENTS: Continent[] = [
+  "Africa",
+  "Asia",
+  "Europe",
+  "North America",
+  "South America",
+  "Oceania",
+];
+
+export interface Country {
+  code: string; // ISO 3166-1 alpha-2
+  name: string;
+  capital: string;
+  continent: Continent;
+}
 
 export const COUNTRIES: Country[] = [
   // ---------- Africa ----------

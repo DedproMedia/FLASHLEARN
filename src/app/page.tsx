@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { COUNTRIES } from "@/lib/flashcards/countries";
-import type { Continent } from "@/lib/flashcards/types";
+import { SUBJECTS, getSubject, getSubjectItems } from "@/lib/flashcards/subjects";
+import type { SubjectId } from "@/lib/flashcards/types";
 import { useProgress } from "@/lib/flashcards/useProgress";
-import ContinentFilter from "@/components/flashcards/ContinentFilter";
+import GroupFilter from "@/components/flashcards/GroupFilter";
 import StudyMode from "@/components/flashcards/StudyMode";
 import BrowseDeck from "@/components/flashcards/BrowseDeck";
 import Dashboard from "@/components/flashcards/Dashboard";
@@ -18,14 +18,24 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function FlashcardsPage() {
+  const [subjectId, setSubjectId] = useState<SubjectId>("capitals");
   const [tab, setTab] = useState<Tab>("study");
-  const [continent, setContinent] = useState<Continent | "All">("All");
-  const { progress, hydrated, rate } = useProgress();
+  const [group, setGroup] = useState<string>("All");
+  const { progress, hydrated, rate } = useProgress(subjectId);
 
+  const subject = getSubject(subjectId);
+  const items = useMemo(() => getSubjectItems(subjectId), [subjectId]);
   const deck = useMemo(
-    () => (continent === "All" ? COUNTRIES : COUNTRIES.filter((c) => c.continent === continent)),
-    [continent]
+    () => (group === "All" ? items : items.filter((i) => i.group === group)),
+    [items, group]
   );
+
+  function handleSubjectChange(id: SubjectId) {
+    if (id === subjectId) return;
+    setSubjectId(id);
+    setGroup("All");
+    setTab("study");
+  }
 
   if (!hydrated) {
     return <p className="text-center text-gray-400 py-12">Loading your deck…</p>;
@@ -33,6 +43,23 @@ export default function FlashcardsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap gap-2">
+        {SUBJECTS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => handleSubjectChange(s.id)}
+            className={`!px-4 !py-2 rounded-lg text-sm font-semibold ${
+              subjectId === s.id
+                ? "!bg-indigo-600 !text-white"
+                : "!bg-gray-100 !text-gray-600 hover:!bg-gray-200"
+            }`}
+          >
+            {s.icon} {s.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex gap-2">
           {TABS.map((t) => (
@@ -51,15 +78,17 @@ export default function FlashcardsPage() {
           ))}
         </div>
         {tab !== "dashboard" && (
-          <ContinentFilter value={continent} onChange={setContinent} />
+          <GroupFilter groups={subject.groups} value={group} onChange={setGroup} />
         )}
       </div>
 
       {tab === "study" && (
-        <StudyMode key={continent} deck={deck} progress={progress} onRate={rate} />
+        <StudyMode key={`${subjectId}:${group}`} deck={deck} progress={progress} onRate={rate} />
       )}
       {tab === "browse" && <BrowseDeck deck={deck} progress={progress} onRate={rate} />}
-      {tab === "dashboard" && <Dashboard progress={progress} />}
+      {tab === "dashboard" && (
+        <Dashboard items={items} groups={subject.groups} progress={progress} />
+      )}
     </div>
   );
 }
